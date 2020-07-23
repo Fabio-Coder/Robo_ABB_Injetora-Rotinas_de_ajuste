@@ -1,0 +1,431 @@
+%%%
+  VERSION:1
+  LANGUAGE:ENGLISH
+%%%
+
+MODULE UTILITY(SYSMODULE)
+
+!===================================================================================
+! Dichiarazione TOOL
+  PERS tooldata USR_toolPinza:=[TRUE,[[0,-300,255],[1,0,0,0]],[26.2,[1.4,-174.1,69.9],[1,0,0,0],3.075,2.827,1.108]];
+  PERS tooldata USR_toolRestore:=[TRUE,[[0,-300,255],[1,0,0,0]],[26.2,[1.4,-174.1,69.9],[1,0,0,0],3.075,2.827,1.108]];
+!===================================================================================
+! dichiarazioni WORKOBJECT
+  PERS wobjdata wobjMDF := [FALSE,TRUE,"",[[0,0,0],[0.382683,0,0,0.92388]],[[0,0,0],[1,0,0,0]]];
+!===================================================================================
+  VAR jointtarget USR_jActual;
+  VAR jointtarget USR_jCompare;
+!===================================================================================
+  PERS string stVideo{11}:=["------ RELBO srl ** COLOSIO GROUP -----<","Extração(sec):10.49; Robot(sec):56.33","Celula(sec):74.02; Peças/hora: 48.63","Boas:322,Refug.:26,Totais:348","---------------------------------------<","Colocando en útil intermedio","Ciclo de prensa","Retirando peça de prensa","Start prensa","Colocando prensadas","Retirando de útil intermedio"];
+!==================================================================================
+
+!*********************************************************
+! Routine:  USR_MsgWaitDI()
+! Input parameter:  mensaje
+!*********************************************************
+PROC USR_MsgWaitDI(
+		VAR SignalDI DiCtrl,
+		String sMessage)
+	
+	IF DInput(DiCtrl)=0 THEN
+		USR_Print(sMessage);
+	ENDIF
+	
+ENDPROC
+
+!*********************************************************
+! Routine:  USR_Print
+! Input parameter:  mensaje
+!*********************************************************
+PROC USR_Print(
+		string sMessage)
+		
+	TPErase;
+	
+	stVideo{1}:="------ RELBO srl ** COLOSIO GROUP -----<";
+	stVideo{2}:=s_TempoExtr{nIdioma}+NumToStr(ROB_nTimerEXT,2)+"; "+s_TempoRobot{nIdioma}+NumToStr(ROB_nTimerROB,2);
+	stVideo{3}:=s_TempoPfo{nIdioma}+NumToStr(ROB_ntimerMDF,2);
+	IF ROB_ntimerMDF>0 THEN
+		stVideo{4}:=s_PezziOra{nIdioma}+NumToStr(3600/ROB_ntimerMDF,2);
+	ELSE
+		stVideo{4}:=s_PezziOra{nIdioma}+" - ";
+	ENDIF
+	stVideo{3}:=stVideo{3}+"; "+stVideo{4};
+	stVideo{4}:=s_Buoni{nIdioma}+NumToStr(ROB_nPzBuona,0)+s_Scarti{nIdioma}+NumToStr(ROB_nPzRechazo,0)+s_Totali{nIdioma}+NumToStr(ROB_nPzTotal,0);
+	stVideo{5}:="---------------------------------------<";
+	stVideo{6}:=stVideo{7};
+	stVideo{7}:=stVideo{8};
+	stVideo{8}:=stVideo{9};
+	stVideo{9}:=stVideo{10};
+	stVideo{10}:=stVideo{11};
+	stVideo{11}:=sMessage;
+	
+	! nHbltcMensajes = 0 ==> mensajes siempre desactivados
+	!				 = 1 ==> mensajes siempre activados
+	!				 = 2 ==> mensajes activados solamente en ciclo automÃ¡tico
+	IF (nHbltcMensajes=1 OR (nHbltcMensajes=2 AND DOutput(DO_V07_RobEnAuto)=1)) THEN
+		FOR i FROM 1 TO 11 DO
+			TPWrite stVideo{i};
+		ENDFOR
+	ENDIF
+	
+ENDPROC
+
+!*********************************************************
+! Routine:  USR_CtrlRobPos()
+! Input parameter:  posiciÃ³n a controlar
+!*********************************************************
+FUNC bool CtrlRobPos(
+		robtarget pComp)
+	
+	VAR bool bTemp;
+    
+	! USR_nMaxRobax: mÃ¡xima diferencia angular permitida
+	CONST num USR_nMaxRobax:=3;
+	
+	! posiciÃ³n actual
+	USR_jActual:=CJointT();
+	
+    ! posiciÃ³n a controlar (parÃ¡metro de entrada a la rutina)
+    USR_jCompare:=CalcJointT(pComp,Tool:=USR_toolPinza\WObj:=wobjMDF);
+	
+    bTemp:=TRUE;
+    IF Abs(USR_jCompare.robax.rax_1-USR_jActual.robax.rax_1)>USR_nMaxRobax bTemp:=FALSE;
+    IF Abs(USR_jCompare.robax.rax_2-USR_jActual.robax.rax_2)>USR_nMaxRobax bTemp:=FALSE;
+    IF Abs(USR_jCompare.robax.rax_3-USR_jActual.robax.rax_3)>USR_nMaxRobax bTemp:=FALSE;
+    IF Abs(USR_jCompare.robax.rax_4-USR_jActual.robax.rax_4)>USR_nMaxRobax bTemp:=FALSE;
+    IF Abs(USR_jCompare.robax.rax_5-USR_jActual.robax.rax_5)>USR_nMaxRobax bTemp:=FALSE;
+    IF Abs(USR_jCompare.robax.rax_6-USR_jActual.robax.rax_6)>USR_nMaxRobax bTemp:=FALSE;
+	
+    RETURN bTemp;
+    
+ENDFUNC
+
+!*********************************************************
+! Routine:  ROB_Setup()
+! Note:
+!*********************************************************
+PROC ROB_Setup()
+	
+	VAR bool bParModify:=FALSE;
+	VAR bool bPasswordOk:=FALSE;
+	VAR errnum errvar;
+	VAR num nParMod:=0;
+	VAR num nParSensSpr:=0;
+	VAR num nParSens01:=0;
+	VAR num nParSens02:=0;
+	VAR num nParSens03:=0;
+	VAR num nParSens04:=0;
+	VAR num nParSens05:=0;
+	VAR num nParSens06:=0;
+	VAR num nParSens07:=0;
+	VAR num nParSens08:=0;
+	VAR num nParSens09:=0;
+	VAR num nParSens10:=0;
+	VAR num nParSoft:=0;
+	VAR num nParKeepIncompl:=0;
+	VAR num nParCoolTank:=0;
+	VAR num nParCoolTankTime:=0;
+	VAR num nParDrippingTime:=0;
+	VAR num nParCoolScrap:=0;
+	VAR num nParDepInt:=0;
+	VAR num nParDepIntSns:=0;
+	VAR num nParDepIntStop:=0;
+	VAR num nParTrim:=0;
+	VAR num nParTrimTime1:=0;
+	VAR num nParTrimTime2:=0;
+	VAR num nParBiscRecov:=0;
+	VAR num nParTrimPickSoft:=0;
+	VAR num nParTrmStop:=0;
+	VAR num nParCicloSpec:=0;
+	VAR num nParPulseNastroOk:=0;
+	VAR num nParResetGoodBad:=0;
+	VAR num nParSave:=0;
+	VAR num nParDone:=0;
+	VAR num nParTemp:=0;
+	VAR num nParPassword:=0;
+	
+	bParModify:=TRUE;
+	WaitDI DI_P305_01_StartCiclo,0;
+	WHILE bParModify=TRUE DO
+		TPErase;
+		TPWrite s_ChgParam1{nIdioma};
+		TPReadFK nParMod,s_ChgParam2{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma} \DIBreak:=DI_P305_01_StartCiclo\BreakFlag:=errvar;
+		IF nParMod=1 THEN
+			TPErase;
+			TPReadNum nParPassword, s_ParPassword{nIdioma};
+			bPasswordOk:=FALSE;
+			IF nParPassword=nPass THEN
+				bPasswordOk:=TRUE;
+			ELSE
+				TPReadFK nParTemp,s_ParPassErrata{nIdioma},"","","OK","","";
+			ENDIF
+		ENDIF
+		IF (nParMod=1 AND bPasswordOk=TRUE) THEN
+      sns:
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSnsAntPulver;
+			TPReadFK nParSensSpr,s_ParSnsSpr{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns01;
+			TPReadFK nParSens01,s_ParSns01{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns02;
+			TPReadFK nParSens02,s_ParSns02{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns03;
+			TPReadFK nParSens03,s_ParSns03{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns04;
+			TPReadFK nParSens04,s_ParSns04{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns05;
+			TPReadFK nParSens05,s_ParSns05{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns06;
+			TPReadFK nParSens06,s_ParSns06{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns07;
+			TPReadFK nParSens07,s_ParSns07{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns08;
+			TPReadFK nParSens08,s_ParSns08{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			! TPErase;
+			! TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns09;			
+			! TPReadFK nParSens09,s_ParSns09{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			! TPErase;
+			! TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSns10;
+			! TPReadFK nParSens10,s_ParSns10{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			IF nParSens01<>1 AND nParSens02<>1 AND nParSens03<>1 AND nParSens04<>1 AND nParSens05<>1 AND nParSens06<>1 AND nParSens07<>1 AND nParSens08<>1 AND nParSens09<>1 AND nParSens10<>1 THEN
+				TPErase;
+				TPReadFK nParTemp,s_NessunaFtc{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+				IF nParTemp=5 GOTO sns;
+			ENDIF
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSoftservo;
+			TPReadFK nParSoft,s_ParSofSrv{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcGuardarIncompl;
+			TPReadFK nParKeepIncompl,s_ParKeepInc{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcEnfriamiento;
+			TPReadFK nParCoolTank,s_ParCoolTank{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			IF nParCoolTank=1 THEN
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Num:=nTiempoEnfriam;
+				TPReadNum nParCoolTankTime, s_ParCool1{nIdioma};
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Num:=nTiempoGoteo;
+				TPReadNum nParDrippingTime, s_ParCool2{nIdioma};
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcEnfriaRechazo;
+				TPReadFK nParCoolScrap,s_ParCool3{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			ELSE
+				nParCoolTankTime:=1;
+				nParDrippingTime:=1;
+				nParCoolScrap:=5;
+			ENDIF
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcUtilInt;
+			TPReadFK nParDepInt,s_ParDepInter{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			IF nParDepInt=1 THEN
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcSnsUtilInt;
+				TPReadFK nParDepIntSns,s_ParDepInterSns{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+				IF nParDepIntSns=1 THEN
+					TPErase;
+					TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcStopUtilSns;
+					TPReadFK nParDepIntStop,s_ParDepInterStop{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+				ELSE
+					nParDepIntStop:=5;
+				ENDIF
+			ELSE
+				nParDepIntSns:=5;
+			ENDIF
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcPrensaColoc;
+			TPReadFK nParTrim,s_ParTrim1{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			IF nParTrim=1 THEN
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Num:=nTiempoMaxDIPrnColoc;
+				TPReadNum nParTrimTime1, s_ParTrimTime1{nIdioma};
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcPrensaRecog;
+				TPReadFK nParBiscRecov,s_ParTrim2{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+				IF nParBiscRecov=1 THEN
+					TPErase;
+					TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcPrnRecogSoft;
+					TPReadFK nParTrimPickSoft,s_ParTrimPickSoft{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+					TPErase;
+					TPWrite s_ParValPrec{nIdioma}\Num:=nTiempoMaxDIPrnRecog;
+					TPReadNum nParTrimTime2, s_ParTrimTime2{nIdioma};
+				ELSE
+					nParTrimTime2:=10;	
+					nParTrimPickSoft:=5;
+				ENDIF
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcStopPrensaNoAuto;
+				TPReadFK nParTrmStop,s_ParTrim4{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			ELSE
+				nParBiscRecov:=5;
+				nParTrmStop:=5;
+				nParTrimTime1:=10;
+				nParTrimTime2:=10;
+			ENDIF
+			TPErase;
+			IF (nParTrim=1 AND nParBiscRecov=1 AND nParDepInt=1) THEN
+				TPErase;
+				TPWrite s_ParValPrec{nIdioma}\Bool:=bHbltcCicloSpec;
+				TPReadFK nParCicloSpec,s_ParCicloSpec{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			ELSE
+				nParCicloSpec:=5;
+			ENDIF
+			TPErase;
+			TPWrite s_ParValPrec{nIdioma}\Num:=nTiempPulsoCinta;
+			TPReadNum nParPulseNastroOk, s_ParPulseNastroOk{nIdioma};  
+			TPErase;
+			TPReadFK nParResetGoodBad,s_ParCnt{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			TPErase;
+			TPReadFK nParSave,s_ParConfirm{nIdioma},s_Si{nIdioma},"","","",s_No{nIdioma};
+			IF nParSave=1 THEN
+				IF nParSensSpr=1 THEN
+					bHbltcSnsAntPulver:=TRUE;
+				ELSE
+					bHbltcSnsAntPulver:=FALSE;
+				ENDIF
+				IF nParSens01=1 THEN
+					bHbltcSns01:=TRUE;
+				ELSE
+					bHbltcSns01:=FALSE;
+				ENDIF
+				IF nParSens02=1 THEN
+					bHbltcSns02:=TRUE;
+				ELSE
+					bHbltcSns02:=FALSE;
+				ENDIF
+				IF nParSens03=1 THEN
+					bHbltcSns03:=TRUE;
+				ELSE
+					bHbltcSns03:=FALSE;
+				ENDIF
+				IF nParSens04=1 THEN
+					bHbltcSns04:=TRUE;
+				ELSE
+					bHbltcSns04:=FALSE;
+				ENDIF
+				IF nParSens05=1 THEN
+					bHbltcSns05:=TRUE;
+				ELSE
+					bHbltcSns05:=FALSE;
+				ENDIF
+				IF nParSens06=1 THEN
+					bHbltcSns06:=TRUE;
+				ELSE
+					bHbltcSns06:=FALSE;
+				ENDIF
+				IF nParSens07=1 THEN
+					bHbltcSns07:=TRUE;
+				ELSE
+					bHbltcSns07:=FALSE;
+				ENDIF
+				IF nParSens08=1 THEN
+					bHbltcSns08:=TRUE;
+				ELSE
+					bHbltcSns08:=FALSE;
+				ENDIF
+				IF nParSens09=1 THEN
+					bHbltcSns09:=TRUE;
+				ELSE
+					bHbltcSns09:=FALSE;
+				ENDIF
+				IF nParSens10=1 THEN
+					bHbltcSns10:=TRUE;
+				ELSE
+					bHbltcSns10:=FALSE;
+				ENDIF
+				IF nParSoft=1 THEN
+					bHbltcSoftservo:=TRUE;
+				ELSE
+					bHbltcSoftservo:=FALSE;
+				ENDIF
+				IF nParKeepIncompl=1 THEN
+					bHbltcGuardarIncompl:=TRUE;
+				ELSE
+					bHbltcGuardarIncompl:=FALSE;
+				ENDIF
+				IF nParCoolTank=1 THEN
+					bHbltcEnfriamiento:=TRUE;
+				ELSE
+					bHbltcEnfriamiento:=FALSE;
+				ENDIF
+				nTiempoEnfriam:=nParCoolTankTime;
+				nTiempoGoteo:=nParDrippingTime;
+				IF nParCoolScrap=1 THEN
+					bHbltcEnfriaRechazo:=TRUE;
+				ELSE
+					bHbltcEnfriaRechazo:=FALSE;
+				ENDIF
+				IF nParDepInt=1 THEN
+					bHbltcUtilInt:=TRUE;
+				ELSE
+					bHbltcUtilInt:=FALSE;
+				ENDIF
+				IF nParDepIntSns=1 THEN
+					bHbltcSnsUtilInt:=TRUE;
+				ELSE
+					bHbltcSnsUtilInt:=FALSE;
+				ENDIF
+				IF nParDepIntStop=1 THEN
+					bHbltcStopUtilSns:=TRUE;
+				ELSE
+					bHbltcStopUtilSns:=FALSE;
+				ENDIF
+				IF nParTrim=1 THEN
+					bHbltcPrensaColoc:=TRUE;
+				ELSE
+					bHbltcPrensaColoc:=FALSE;
+				ENDIF
+				nTiempoMaxDIPrnColoc:=nParTrimTime1;
+				IF nParBiscRecov=1 THEN
+					bHbltcPrensaRecog:=TRUE;
+				ELSE
+					bHbltcPrensaRecog:=FALSE;
+				ENDIF
+				IF nParTrimPickSoft=1 THEN
+					bHbltcPrnRecogSoft:=TRUE;
+				ELSE
+					bHbltcPrnRecogSoft:=FALSE;
+				ENDIF
+				nTiempoMaxDIPrnRecog:=nParTrimTime2;
+				IF nParTrmStop=1 THEN
+					bHbltcStopPrensaNoAuto:=TRUE;
+				ELSE
+					bHbltcStopPrensaNoAuto:=FALSE;
+				ENDIF
+				IF nParCicloSpec=1 THEN
+					bHbltcCicloSpec:=TRUE;
+				ELSE
+					bHbltcCicloSpec:=FALSE;
+				ENDIF
+				nTiempPulsoCinta:=nParPulseNastroOk;
+				IF nParResetGoodBad=1 THEN
+					ROB_nPzTotal:=0;
+					ROB_nPzBuona:=0;
+					ROB_nPzRechazo:=0;
+					nParResetGoodBad:=0;
+				ENDIF
+				TPErase;
+				TPReadFK nParDone,s_ParChgOk{nIdioma},"","","OK","","";
+			ENDIF
+		ELSE
+			IF (nParMod=0 OR nParMod=5) bParModify:=FALSE;
+		ENDIF
+		nParMod:=0;
+	ENDWHILE
+	
+	WaitDI DI_P305_01_StartCiclo,0;
+	TPErase;
+	
+ENDPROC
+
+ENDMODULE

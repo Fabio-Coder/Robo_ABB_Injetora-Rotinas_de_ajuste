@@ -1,0 +1,46 @@
+%%%
+  VERSION:1
+  LANGUAGE:ENGLISH
+%%%
+
+MODULE WLDZONES(SYSMODULE)
+	
+	VAR shapedata volRobotHome;
+	VAR shapedata volRobotWaiting;
+	VAR shapedata volFIngPressa;
+	VAR shapedata volFIngTrancia;
+	
+	VAR wzstationary wz_RobotHome;
+	VAR wzstationary wz_RobotWaiting;
+	VAR wzstationary wz_FIngPressa;
+	VAR wzstationary wz_FIngTrancia;
+	
+	PERS jointtarget home_pos:=[[44.9952,-18.0004,39.9952,-0.000149346,90.0013,-0.000559989],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+	PERS jointtarget waiting_pos:=[[134.998,-55.0029,39.995,-0.000286672,90.002,-3.67329E-06],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+	CONST jointtarget delta_pos:=[[2,2,2,2,2,2],[9E9,9E9,9E9,9E9,9E9,9E9]];
+	
+	CONST pos CilPressaCentro:=[-7070,7070,-1000];
+	CONST num CilPressaRaggio:=8500;
+	CONST num CilPressaAltezza:=5000;
+	
+	CONST pos CilTranciaCentro:=[7070,-7070,-1000];
+	CONST num CilTranciaRaggio:=8000;
+	CONST num CilTranciaAltezza:=5000;
+	
+	PROC Act_Zones()
+		home_pos:=CalcJointT(ROB_pHome,Tool:=USR_toolPinza\WObj:=wobjMDF);
+		WZHomeJointDef\Inside,volRobotHome,home_pos,delta_pos;
+		
+		waiting_pos:=CalcJointT(MDF_pEspera,Tool:=USR_toolPinza\WObj:=wobjMDF);
+		WZHomeJointDef\Inside,volRobotWaiting,waiting_pos,delta_pos;
+		
+		WZCylDef\Inside,volFIngPressa,CilPressaCentro,CilPressaRaggio,CilPressaAltezza;
+		WZCylDef\Inside,volFIngTrancia,CilTranciaCentro,CilTranciaRaggio,CilTranciaAltezza;
+		
+		WZDOSet\Stat,wz_FIngPressa\Inside,volFIngPressa,DO_V01_MdfFueraAreaTrab_WZ,0;
+		WZDOSet\Stat,wz_FIngTrancia\Before,volFIngTrancia,DO_V02_PrensaFueraAreaTrab_WZ,0;
+		WZDOSet\Stat,wz_RobotHome\Inside,volRobotHome,DO_V03_RobEnHome,1;
+		WZDOSet\Stat,wz_RobotWaiting\Inside,volRobotWaiting,DO_V04_RobotEsperaEntrada,1;
+	ENDPROC
+  
+ENDMODULE
